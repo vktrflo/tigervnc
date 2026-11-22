@@ -92,7 +92,8 @@ VNCServerST::VNCServerST(const char* name_, SDesktop* desktop_)
   : desktop(desktop_), desktopStarted(false),
     desktopStarting(false), blockCounter(0), pb(nullptr),
     ledState(ledUnknown), name(name_), pointerClient(nullptr),
-    clipboardClient(nullptr), pointerClientTime(0),
+    clipboardClient(nullptr), micClient(nullptr), audioAvailable(false),
+    pointerClientTime(0),
     comparer(nullptr), cursor(new Cursor(0, 0, {}, nullptr)),
     renderedCursorInvalid(false),
     keyRemapper(&KeyRemapper::defInstance),
@@ -209,6 +210,8 @@ void VNCServerST::removeSocket(network::Socket* sock) {
       if (clipboardClient == *ci)
         handleClipboardAnnounce(*ci, false);
       clipboardRequestors.remove(*ci);
+      if (micClient == *ci)
+        micStop(*ci);
 
       std::string peer((*ci)->getPeerEndpoint());
 
@@ -471,6 +474,70 @@ void VNCServerST::bell()
   std::list<VNCSConnectionST*>::iterator ci;
   for (ci = clients.begin(); ci != clients.end(); ++ci)
     (*ci)->bellOrClose();
+}
+
+void VNCServerST::setAudioAvailable(bool available)
+{
+  if (audioAvailable == available)
+    return;
+
+  audioAvailable = available;
+  slog.info(available ? "Sound is available" : "Sound is no longer available");
+
+  if (!available)
+    return;
+
+  std::list<VNCSConnectionST*>::iterator ci;
+  for (ci = clients.begin(); ci != clients.end(); ++ci)
+    (*ci)->announceAudioOrClose();
+}
+
+void VNCServerST::sendAudio(const int16_t* pcm, size_t frames)
+{
+  if (!audioAvailable)
+    return;
+
+  std::list<VNCSConnectionST*>::iterator ci, ci_next;
+  for (ci = clients.begin(); ci != clients.end(); ci = ci_next) {
+    ci_next = ci; ci_next++;
+    (*ci)->sendAudioOrClose(pcm, frames);
+  }
+}
+
+bool VNCServerST::isMicAvailable()
+{
+  return desktop->micAvailable();
+}
+
+void VNCServerST::micStart(VNCSConnectionST* client, int channels,
+                           uint32_t sampleRate)
+{
+  if (!desktop->micAvailable())
+    return;
+
+  if (micClient != nullptr && micClient != client)
+    slog.info("Microphone taken over by %s", client->getPeerEndpoint());
+
+  micClient = client;
+  desktop->micStart(channels, sampleRate);
+}
+
+void VNCServerST::micData(VNCSConnectionST* client, const uint8_t* data,
+                          size_t len)
+{
+  if (micClient != client)
+    return;
+
+  desktop->micData(data, len);
+}
+
+void VNCServerST::micStop(VNCSConnectionST* client)
+{
+  if (micClient != client)
+    return;
+
+  micClient = nullptr;
+  desktop->micStop();
 }
 
 void VNCServerST::setName(const char* name_)

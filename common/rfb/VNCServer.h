@@ -117,6 +117,19 @@ namespace rfb {
     // bell() tells the server that it should make all clients make a bell sound.
     virtual void bell() = 0;
 
+    // Sound is passed to the server as interleaved signed 16-bit PCM
+    // in native byte order, at audioRate with audioChannels channels.
+    static const int audioRate = 48000;
+    static const int audioChannels = 2;
+
+    // setAudioAvailable() tells the server whether it can offer sound
+    // to clients (QEMU audio extension).
+    virtual void setAudioAvailable(bool available) = 0;
+
+    // sendAudio() passes captured sound on to every client that has
+    // enabled sound. Chunks of 10-20 ms work best.
+    virtual void sendAudio(const int16_t* pcm, size_t frames) = 0;
+
     // approveConnection() is called some time after
     // SDesktop::queryConnection() has been called, to accept or reject
     // the connection.  The accept argument should be true for

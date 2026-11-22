@@ -104,6 +104,8 @@ XserverDesktop::~XserverDesktop()
   }
   if (shadowFramebuffer)
     delete [] shadowFramebuffer;
+  audio.stop();
+  mic.close();
   delete server;
 }
 
@@ -166,6 +168,42 @@ void XserverDesktop::init(rfb::VNCServer* vs)
 {
   // We already own the server object, and we always keep it in a
   // ready state
+}
+
+// Sound and the headset microphone only run while clients are connected
+
+void XserverDesktop::start()
+{
+  // Create the mic first so that its appearance does not disturb the
+  // capture stream
+  mic.open();
+  audio.start(server);
+}
+
+void XserverDesktop::stop()
+{
+  audio.stop();
+  mic.close();
+}
+
+bool XserverDesktop::micAvailable()
+{
+  return mic.available();
+}
+
+void XserverDesktop::micStart(int channels, uint32_t sampleRate)
+{
+  mic.start(channels, sampleRate);
+}
+
+void XserverDesktop::micData(const uint8_t* data, size_t len)
+{
+  mic.data(data, len);
+}
+
+void XserverDesktop::micStop()
+{
+  mic.stop();
 }
 
 void XserverDesktop::queryConnection(rfb::SConnection* conn)

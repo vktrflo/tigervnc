@@ -124,6 +124,15 @@ namespace rfb {
     // when the client received the request.
     virtual void handleClipboardData(const char* /*data*/) {}
 
+    // Quest VNC in-band headset microphone. micAvailable() says whether
+    // the desktop has somewhere to play microphone audio into. The
+    // audio is interleaved signed 16-bit little-endian PCM.
+
+    virtual bool micAvailable() { return false; }
+    virtual void micStart(int /*channels*/, uint32_t /*sampleRate*/) {}
+    virtual void micData(const uint8_t* /*data*/, size_t /*len*/) {}
+    virtual void micStop() {}
+
   };
 
 };

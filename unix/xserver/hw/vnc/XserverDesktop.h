@@ -37,6 +37,7 @@
 #include <rfb/PixelBuffer.h>
 
 #include <unixcommon.h>
+#include <QuestAudio.h>
 
 #include "vncInput.h"
 
@@ -94,6 +95,8 @@ public:
 
   // rfb::SDesktop callbacks
   void init(rfb::VNCServer* vs) override;
+  void start() override;
+  void stop() override;
   void terminate() override;
   void queryConnection(rfb::SConnection* conn) override;
   void pointerEvent(const core::Point& pos,
@@ -105,6 +108,10 @@ public:
   void handleClipboardRequest() override;
   void handleClipboardAnnounce(bool available) override;
   void handleClipboardData(const char* data) override;
+  bool micAvailable() override;
+  void micStart(int channels, uint32_t sampleRate) override;
+  void micData(const uint8_t* data, size_t len) override;
+  void micStop() override;
 
   // rfb::PixelBuffer callbacks
   void grabRegion(const core::Region& r) override;
@@ -130,5 +137,8 @@ private:
   std::map<uint64_t, uint64_t> pendingMsc;
 
   core::Point oldCursorPos;
+
+  AudioCapture audio;
+  MicSink mic;
 };
 #endif

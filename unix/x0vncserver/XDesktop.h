@@ -24,6 +24,7 @@
 #include <rfb/SDesktop.h>
 #include <TXWindow.h>
 #include <unixcommon.h>
+#include <QuestAudio.h>
 
 #include <X11/XKBlib.h>
 #ifdef HAVE_XDAMAGE
@@ -70,6 +71,10 @@ public:
   void handleClipboardRequest() override;
   void handleClipboardAnnounce(bool available) override;
   void handleClipboardData(const char* data) override;
+  bool micAvailable() override;
+  void micStart(int channels, uint32_t sampleRate) override;
+  void micData(const uint8_t* data, size_t len) override;
+  void micStop() override;
 
   // -=- XSelectionHandler interface
   void handleXSelectionAnnounce(bool available) override;
@@ -114,6 +119,9 @@ protected:
   unsigned ledState;
   const unsigned short *codeMap;
   unsigned codeMapLen;
+
+  AudioCapture audio;
+  MicSink mic;
 
 protected:
 #ifdef HAVE_XTEST

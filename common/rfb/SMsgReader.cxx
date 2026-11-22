@@ -35,6 +35,7 @@
 
 #include <rfb/msgTypes.h>
 #include <rfb/qemuTypes.h>
+#include <rfb/questTypes.h>
 #include <rfb/clipboardTypes.h>
 #include <rfb/Exception.h>
 #include <rfb/PixelFormat.h>
@@ -52,7 +53,8 @@ static core::IntParameter maxCutText(
   256*1024, 0, INT_MAX);
 
 SMsgReader::SMsgReader(SMsgHandler* handler_, rdr::InStream* is_)
-  : handler(handler_), is(is_), state(MSGSTATE_IDLE)
+  : handler(handler_), is(is_), state(MSGSTATE_IDLE),
+    questMicEnabled(false)
 {
 }
 
@@ -98,7 +100,12 @@ bool SMsgReader::readMsg()
     ret = readEnableContinuousUpdates();
     break;
   case msgTypeClientFence:
-    ret = readFence();
+    static_assert(msgTypeClientFence == msgTypeQuestMic,
+                  "Quest VNC mic message shares the fence message type");
+    if (questMicEnabled)
+      ret = readQuestMic();
+    else
+      ret = readFence();
     break;
   case msgTypeKeyEvent:
     ret = readKeyEvent();
@@ -486,6 +493,9 @@ bool SMsgReader::readQEMUMessage()
   case qemuExtendedKeyEvent:
     ret = readQEMUKeyEvent();
     break;
+  case qemuAudio:
+    ret = readQEMUAudio();
+    break;
   default:
     throw protocol_error(
       core::format(_("Unknown QEMU submessage type %d"), subType));
@@ -512,5 +522,85 @@ bool SMsgReader::readQEMUKeyEvent()
     return true;
   }
   handler->keyEvent(keysym, keycode, down);
+  return true;
+}
+
+bool SMsgReader::readQEMUAudio()
+{
+  if (!is->hasData(2))
+    return false;
+
+  int operation = is->readU16();
+
+  switch (operation) {
+  case msgToQemuEnableAudio:
+    handler->audioEnable(true);
+    break;
+  case msgToQemuDisableAudio:
+    handler->audioEnable(false);
+    break;
+  case msgToQemuSetAudioFormat:
+    {
+      if (!is->hasData(1 + 1 + 4))
+        return false;
+      int sampleFormat = is->readU8();
+      int channels = is->readU8();
+      uint32_t frequency = is->readU32();
+      handler->audioSetFormat(sampleFormat, channels, frequency);
+    }
+    break;
+  default:
+    throw protocol_error(
+      core::format(_("Unknown QEMU audio operation %d"), operation));
+  }
+
+  return true;
+}
+
+bool SMsgReader::readQuestMic()
+{
+  if (!is->hasData(1))
+    return false;
+
+  is->setRestorePoint();
+
+  int operation = is->readU8();
+
+  switch (operation) {
+  case questMicStart:
+    {
+      if (!is->hasData(1 + 4)) {
+        is->gotoRestorePoint();
+        return false;
+      }
+      int channels = is->readU8();
+      uint32_t sampleRate = is->readU32();
+      handler->micStart(channels, sampleRate);
+    }
+    break;
+  case questMicData:
+    {
+      if (!is->hasData(4)) {
+        is->gotoRestorePoint();
+        return false;
+      }
+      uint32_t len = is->readU32();
+      if (len > questMicMaxData)
+        throw protocol_error(_("Microphone data is too large"));
+      if (!is->hasDataOrRestore(len))
+        return false;
+      handler->micData(is->getptr(len), len);
+      is->setptr(len);
+    }
+    break;
+  case questMicStop:
+    handler->micStop();
+    break;
+  default:
+    throw protocol_error(
+      core::format(_("Unknown microphone operation %d"), operation));
+  }
+
+  is->clearRestorePoint();
   return true;
 }

@@ -46,6 +46,9 @@ namespace rfb {
   const int pseudoEncodingQEMUKeyEvent = -258;
   const int pseudoEncodingQEMUAudio = -259;
 
+  // Quest VNC private extensions
+  const int pseudoEncodingQuestMic = -2703;
+
   // TightVNC-specific
   const int pseudoEncodingLastRect = -224;
   const int pseudoEncodingQualityLevel0 = -32;

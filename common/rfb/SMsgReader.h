@@ -37,6 +37,11 @@ namespace rfb {
     bool readClientInit();
 
     // readMsg() reads a message, calling the handler as appropriate.
+    // Message type 248 is ClientFence in the standard protocol, but the
+    // Quest VNC microphone message once the server has announced that
+    // extension to this client.
+    void setQuestMicEnabled(bool enabled) { questMicEnabled = enabled; }
+
     bool readMsg();
 
     rdr::InStream* getInStream() { return is; }
@@ -58,6 +63,9 @@ namespace rfb {
 
     bool readQEMUMessage();
     bool readQEMUKeyEvent();
+    bool readQEMUAudio();
+
+    bool readQuestMic();
 
   private:
     SMsgHandler* handler;
@@ -71,6 +79,8 @@ namespace rfb {
     stateEnum state;
 
     uint8_t currentMsgType;
+
+    bool questMicEnabled;
   };
 }
 #endif

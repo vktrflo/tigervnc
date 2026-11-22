@@ -42,6 +42,8 @@
 #include <rfb/SMsgWriter.h>
 #include <rfb/encodings.h>
 #include <rfb/ledStates.h>
+#include <rfb/qemuTypes.h>
+#include <rfb/questTypes.h>
 
 using namespace rfb;
 
@@ -52,7 +54,8 @@ SMsgWriter::SMsgWriter(ClientParams* client_, rdr::OutStream* os_)
     nRectsInUpdate(0), nRectsInHeader(0),
     needSetDesktopName(false), needCursor(false),
     needCursorPos(false), needLEDState(false),
-    needQEMUKeyEvent(false), needExtMouseButtonsEvent(false)
+    needQEMUKeyEvent(false), needExtMouseButtonsEvent(false),
+    needQEMUAudio(false), needQuestMic(false)
 {
 }
 
@@ -314,6 +317,48 @@ void SMsgWriter::writeExtendedMouseButtonsSupport()
   needExtMouseButtonsEvent = true;
 }
 
+void SMsgWriter::writeQEMUAudioSupport()
+{
+  if (!client->supportsEncoding(pseudoEncodingQEMUAudio))
+    throw std::logic_error("Client does not support QEMU audio");
+
+  needQEMUAudio = true;
+}
+
+void SMsgWriter::writeQEMUAudioBegin()
+{
+  startMsg(msgTypeQEMUServerMessage);
+  os->writeU8(qemuAudio);
+  os->writeU16(msgFromQemuAudioBegin);
+  endMsg();
+}
+
+void SMsgWriter::writeQEMUAudioEnd()
+{
+  startMsg(msgTypeQEMUServerMessage);
+  os->writeU8(qemuAudio);
+  os->writeU16(msgFromQemuAudioEnd);
+  endMsg();
+}
+
+void SMsgWriter::writeQEMUAudioData(const uint8_t* data, size_t len)
+{
+  startMsg(msgTypeQEMUServerMessage);
+  os->writeU8(qemuAudio);
+  os->writeU16(msgFromQemuAudioData);
+  os->writeU32(len);
+  os->writeBytes(data, len);
+  endMsg();
+}
+
+void SMsgWriter::writeQuestMicSupport()
+{
+  if (!client->supportsEncoding(pseudoEncodingQuestMic))
+    throw std::logic_error("Client does not support Quest VNC microphone");
+
+  needQuestMic = true;
+}
+
 bool SMsgWriter::needFakeUpdate()
 {
   if (needSetDesktopName)
@@ -327,6 +372,10 @@ bool SMsgWriter::needFakeUpdate()
   if (needQEMUKeyEvent)
     return true;
   if (needExtMouseButtonsEvent)
+    return true;
+  if (needQEMUAudio)
+    return true;
+  if (needQuestMic)
     return true;
   if (needNoDataUpdate())
     return true;
@@ -377,6 +426,10 @@ void SMsgWriter::writeFramebufferUpdateStart(int nRects)
     if (needQEMUKeyEvent)
       nRects++;
     if (needExtMouseButtonsEvent)
+      nRects++;
+    if (needQEMUAudio)
+      nRects++;
+    if (needQuestMic)
       nRects++;
   }
 
@@ -521,6 +574,16 @@ void SMsgWriter::writePseudoRects()
   if (needExtMouseButtonsEvent) {
     writeExtendedMouseButtonsRect();
     needExtMouseButtonsEvent = false;
+  }
+
+  if (needQEMUAudio) {
+    writeQEMUAudioRect();
+    needQEMUAudio = false;
+  }
+
+  if (needQuestMic) {
+    writeQuestMicRect();
+    needQuestMic = false;
   }
 }
 
@@ -767,4 +830,33 @@ void SMsgWriter::writeExtendedMouseButtonsRect()
   os->writeU16(0);
   os->writeU16(0);
   os->writeU32(pseudoEncodingExtendedMouseButtons);
+}
+
+void SMsgWriter::writeQEMUAudioRect()
+{
+  if (!client->supportsEncoding(pseudoEncodingQEMUAudio))
+    throw std::logic_error("Client does not support QEMU audio");
+  if (++nRectsInUpdate > nRectsInHeader && nRectsInHeader)
+    throw std::logic_error("SMsgWriter::writeQEMUAudioRect: nRects out of sync");
+
+  os->writeS16(0);
+  os->writeS16(0);
+  os->writeU16(0);
+  os->writeU16(0);
+  os->writeU32(pseudoEncodingQEMUAudio);
+}
+
+void SMsgWriter::writeQuestMicRect()
+{
+  if (!client->supportsEncoding(pseudoEncodingQuestMic))
+    throw std::logic_error("Client does not support Quest VNC microphone");
+  if (++nRectsInUpdate > nRectsInHeader && nRectsInHeader)
+    throw std::logic_error("SMsgWriter::writeQuestMicRect: nRects out of sync");
+
+  os->writeS16(0);
+  os->writeS16(0);
+  os->writeU16(0);
+  os->writeU16(0);
+  os->writeU32(pseudoEncodingQuestMic);
+  os->writeU8(questMicCapability);
 }

@@ -67,6 +67,16 @@ namespace rfb {
                                   const size_t* lengths,
                                   const uint8_t* const* data) = 0;
 
+    // QEMU audio extension (client to server)
+    virtual void audioEnable(bool enable) = 0;
+    virtual void audioSetFormat(int sampleFormat, int channels,
+                                uint32_t frequency) = 0;
+
+    // Quest VNC in-band headset microphone
+    virtual void micStart(int channels, uint32_t sampleRate) = 0;
+    virtual void micData(const uint8_t* data, size_t len) = 0;
+    virtual void micStop() = 0;
+
     ClientParams client;
   };
 }

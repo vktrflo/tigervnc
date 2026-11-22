@@ -25,6 +25,7 @@
 #include <string.h>
 
 #include <algorithm>
+#include <vector>
 
 #include <core/LogWriter.h>
 #include <core/i18n.h>
@@ -67,7 +68,7 @@ SConnection::SConnection(network::Socket* s, AccessRights accessRights_)
     state_(RFBSTATE_UNINITIALISED), preferredEncoding(encodingRaw),
     accessRights(accessRights_), hasRemoteClipboard(false),
     hasLocalClipboard(false),
-    unsolicitedClipboardAttempt(false)
+    unsolicitedClipboardAttempt(false), questMicOffered_(false)
 {
   defaultMajorVersion = 3;
   defaultMinorVersion = 8;
@@ -400,7 +401,22 @@ void SConnection::setEncodings(int nEncodings, const int32_t* encodings)
 {
   int i;
   bool firstFence, firstContinuousUpdates, firstLEDState,
-       firstQEMUKeyEvent, firstExtMouseButtonsEvent;
+       firstQEMUKeyEvent, firstExtMouseButtonsEvent,
+       firstQEMUAudio, firstQuestMic;
+  std::vector<int32_t> filtered;
+
+  // Fences and the Quest VNC microphone share a message type
+  if (questMicOffered_) {
+    for (i = 0;i < nEncodings;i++) {
+      if (encodings[i] == pseudoEncodingFence) {
+        vlog.info("Ignoring fence support, the microphone extension is in use");
+        continue;
+      }
+      filtered.push_back(encodings[i]);
+    }
+    nEncodings = filtered.size();
+    encodings = filtered.data();
+  }
 
   preferredEncoding = encodingRaw;
   for (i = 0;i < nEncodings;i++) {
@@ -415,6 +431,8 @@ void SConnection::setEncodings(int nEncodings, const int32_t* encodings)
   firstLEDState = !client.supportsLEDState();
   firstQEMUKeyEvent = !client.supportsEncoding(pseudoEncodingQEMUKeyEvent);
   firstExtMouseButtonsEvent = !client.supportsEncoding(pseudoEncodingExtendedMouseButtons);
+  firstQEMUAudio = !client.supportsEncoding(pseudoEncodingQEMUAudio);
+  firstQuestMic = !client.supportsEncoding(pseudoEncodingQuestMic);
 
   client.setEncodings(nEncodings, encodings);
 
@@ -430,6 +448,10 @@ void SConnection::setEncodings(int nEncodings, const int32_t* encodings)
     writer()->writeQEMUKeyEvent();
   if (client.supportsEncoding(pseudoEncodingExtendedMouseButtons) && firstExtMouseButtonsEvent)
     writer()->writeExtendedMouseButtonsSupport();
+  if (client.supportsEncoding(pseudoEncodingQEMUAudio) && firstQEMUAudio)
+    supportsQEMUAudio();
+  if (client.supportsEncoding(pseudoEncodingQuestMic) && firstQuestMic)
+    supportsQuestMic();
 
   if (client.supportsEncoding(pseudoEncodingExtendedClipboard)) {
     uint32_t sizes[] = { 0 };
@@ -572,6 +594,52 @@ void SConnection::supportsContinuousUpdates()
 }
 
 void SConnection::supportsLEDState()
+{
+}
+
+void SConnection::supportsQEMUAudio()
+{
+}
+
+void SConnection::supportsQuestMic()
+{
+}
+
+bool SConnection::offerQuestMic()
+{
+  if (questMicOffered_)
+    return true;
+
+  if (client.supportsFence()) {
+    vlog.info("Not offering the microphone extension to a client that uses fences");
+    return false;
+  }
+
+  writer()->writeQuestMicSupport();
+  reader()->setQuestMicEnabled(true);
+  questMicOffered_ = true;
+
+  return true;
+}
+
+void SConnection::audioEnable(bool /*enable*/)
+{
+}
+
+void SConnection::audioSetFormat(int /*sampleFormat*/, int /*channels*/,
+                                 uint32_t /*frequency*/)
+{
+}
+
+void SConnection::micStart(int /*channels*/, uint32_t /*sampleRate*/)
+{
+}
+
+void SConnection::micData(const uint8_t* /*data*/, size_t /*len*/)
+{
+}
+
+void SConnection::micStop()
 {
 }
 

@@ -95,6 +95,18 @@ namespace rfb {
     // let the client know we support extended mouse button support
     void writeExtendedMouseButtonsSupport();
 
+    // Tell the client that we can send sound (QEMU audio extension)
+    void writeQEMUAudioSupport();
+
+    // QEMU audio stream messages. These are sent immediately.
+    void writeQEMUAudioBegin();
+    void writeQEMUAudioEnd();
+    void writeQEMUAudioData(const uint8_t* data, size_t len);
+
+    // Tell the client that it may send headset microphone audio
+    // (Quest VNC extension)
+    void writeQuestMicSupport();
+
     // needFakeUpdate() returns true when an immediate update is needed in
     // order to flush out pseudo-rectangles to the client.
     bool needFakeUpdate();
@@ -150,6 +162,8 @@ namespace rfb {
     void writeSetVMwareCursorPositionRect(int hotspotX, int hotspotY);
     void writeLEDStateRect(uint8_t state);
     void writeQEMUKeyEventRect();
+    void writeQEMUAudioRect();
+    void writeQuestMicRect();
     void writeExtendedMouseButtonsRect();
 
     ClientParams* client;
@@ -164,6 +178,8 @@ namespace rfb {
     bool needLEDState;
     bool needQEMUKeyEvent;
     bool needExtMouseButtonsEvent;
+    bool needQEMUAudio;
+    bool needQuestMic;
 
     typedef struct {
       uint16_t reason, result;

@@ -4,6 +4,7 @@ endif()
 
 add_library(rfb STATIC
   AccessRights.cxx
+  AudioResampler.cxx
   Blacklist.cxx
   Congestion.cxx
   ComparingUpdateTracker.cxx

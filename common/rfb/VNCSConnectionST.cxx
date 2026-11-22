@@ -48,6 +48,7 @@
 #include <rfb/screenTypes.h>
 #include <rfb/fenceTypes.h>
 #include <rfb/ledStates.h>
+#include <rfb/qemuTypes.h>
 #define XK_LATIN1
 #define XK_MISCELLANY
 #define XK_XKB_KEYS
@@ -69,8 +70,14 @@ VNCSConnectionST::VNCSConnectionST(VNCServerST* server_, network::Socket *s,
     losslessTimer(this), server(server_),
     updateRenderedCursor(false), removeRenderedCursor(false),
     continuousUpdates(false), encodeManager(this), idleTimer(this),
-    pointerEventTime(0), clientHasCursor(false)
+    pointerEventTime(0), clientHasCursor(false),
+    audioAnnounced(false), audioEnabled(false),
+    audioFormat(qemuAudioFormatS16), micActive(false)
 {
+  audioBacklogSince.tv_sec = 0;
+  audioBacklogSince.tv_usec = 0;
+  audioResampler.setFormat(VNCServer::audioRate, VNCServer::audioChannels,
+                           48000, 2);
 }
 
 
@@ -281,6 +288,57 @@ void VNCSConnectionST::screenLayoutChangeOrClose(uint16_t reason)
   try {
     screenLayoutChange(reason);
     writeFramebufferUpdate();
+  } catch(std::exception& e) {
+    close(e.what());
+  }
+}
+
+void VNCSConnectionST::announceAudioOrClose()
+{
+  try {
+    if (state() != RFBSTATE_NORMAL)
+      return;
+    if (!client.supportsEncoding(pseudoEncodingQEMUAudio))
+      return;
+    supportsQEMUAudio();
+    writeFramebufferUpdate();
+  } catch(std::exception& e) {
+    close(e.what());
+  }
+}
+
+// If the client has not taken any data for this long, sound is dropped
+// rather than queued behind everything else.
+static const unsigned audioMaxBacklogMs = 250;
+
+void VNCSConnectionST::sendAudioOrClose(const int16_t* pcm, size_t frames)
+{
+  try {
+    if (state() != RFBSTATE_NORMAL || !audioEnabled)
+      return;
+
+    if (getSock()->outStream().hasBufferedData()) {
+      if (audioBacklogSince.tv_sec == 0 && audioBacklogSince.tv_usec == 0)
+        gettimeofday(&audioBacklogSince, nullptr);
+      if (core::msSince(&audioBacklogSince) > audioMaxBacklogMs) {
+        // Restart interpolation so the gap does not click
+        audioResampler.reset();
+        return;
+      }
+    } else {
+      audioBacklogSince.tv_sec = 0;
+      audioBacklogSince.tv_usec = 0;
+    }
+
+    audioSamples.clear();
+    audioResampler.process(pcm, frames, &audioSamples);
+    if (audioSamples.empty())
+      return;
+
+    audioBytes.clear();
+    AudioResampler::convertSamples(audioSamples.data(), audioSamples.size(),
+                                   audioFormat, &audioBytes);
+    writer()->writeQEMUAudioData(audioBytes.data(), audioBytes.size());
   } catch(std::exception& e) {
     close(e.what());
   }
@@ -823,6 +881,114 @@ void VNCSConnectionST::supportsLEDState()
     return;
 
   writer()->writeLEDState();
+}
+
+void VNCSConnectionST::supportsQEMUAudio()
+{
+  if (audioAnnounced || !server->isAudioAvailable())
+    return;
+
+  vlog.debug("Offering sound to %s", getPeerEndpoint());
+  writer()->writeQEMUAudioSupport();
+  audioAnnounced = true;
+}
+
+void VNCSConnectionST::supportsQuestMic()
+{
+  if (!server->isMicAvailable())
+    return;
+  if (!accessCheck(AccessKeyEvents))
+    return;
+
+  if (offerQuestMic())
+    vlog.debug("Offering microphone input to %s", getPeerEndpoint());
+}
+
+void VNCSConnectionST::audioEnable(bool enable)
+{
+  if (enable == audioEnabled)
+    return;
+
+  if (enable && !server->isAudioAvailable()) {
+    vlog.error("Client enabled sound, but no sound is available");
+    return;
+  }
+
+  audioEnabled = enable;
+  audioResampler.reset();
+  audioBacklogSince.tv_sec = 0;
+  audioBacklogSince.tv_usec = 0;
+
+  if (enable) {
+    vlog.info("Sound enabled for %s", getPeerEndpoint());
+    writer()->writeQEMUAudioBegin();
+  } else {
+    vlog.info("Sound disabled for %s", getPeerEndpoint());
+    writer()->writeQEMUAudioEnd();
+  }
+}
+
+void VNCSConnectionST::audioSetFormat(int sampleFormat, int channels,
+                                      uint32_t frequency)
+{
+  if (AudioResampler::bytesPerSample(sampleFormat) == 0) {
+    vlog.error("Client requested unsupported sound sample format %d",
+               sampleFormat);
+    return;
+  }
+  if (channels < 1 || channels > 2) {
+    vlog.error("Client requested unsupported number of sound channels %d",
+               channels);
+    return;
+  }
+  if (frequency < 8000 || frequency > 96000) {
+    vlog.error("Client requested unsupported sound frequency %u",
+               (unsigned)frequency);
+    return;
+  }
+
+  vlog.debug("Sound format for %s: format %d, %d channels, %u Hz",
+             getPeerEndpoint(), sampleFormat, channels, (unsigned)frequency);
+
+  audioFormat = sampleFormat;
+  audioResampler.setFormat(VNCServer::audioRate, VNCServer::audioChannels,
+                           frequency, channels);
+}
+
+void VNCSConnectionST::micStart(int channels, uint32_t sampleRate)
+{
+  if (!accessCheck(AccessKeyEvents))
+    return;
+
+  if (channels < 1 || channels > 2 ||
+      sampleRate < 8000 || sampleRate > 96000) {
+    vlog.error("Client requested unsupported microphone format: "
+               "%d channels, %u Hz", channels, (unsigned)sampleRate);
+    return;
+  }
+
+  vlog.info("Microphone started by %s: %d channels, %u Hz",
+            getPeerEndpoint(), channels, (unsigned)sampleRate);
+  micActive = true;
+  server->micStart(this, channels, sampleRate);
+}
+
+void VNCSConnectionST::micData(const uint8_t* data, size_t len)
+{
+  if (!micActive)
+    return;
+
+  server->micData(this, data, len);
+}
+
+void VNCSConnectionST::micStop()
+{
+  if (!micActive)
+    return;
+
+  vlog.info("Microphone stopped by %s", getPeerEndpoint());
+  micActive = false;
+  server->micStop(this);
 }
 
 void VNCSConnectionST::handleTimeout(core::Timer* t)

@@ -99,6 +99,15 @@ Always treat incoming connections as shared, regardless of the client-specified
 setting. Default is off.
 .
 .TP
+.B \-AudioCapture \fImethod\fP
+How to capture the desktop's sound for clients that can play it (the QEMU
+audio extension, pseudo-encoding -259). \fBauto\fP records the default
+PulseAudio or PipeWire output's monitor with \fBparec\fP, falling back to
+\fBpw-record\fP. \fBparec\fP and \fBpw-record\fP force one of them,
+\fBtone\fP sends a test beep and \fBnone\fP turns sound off. Capture only
+runs while clients are connected. Default is \fBauto\fP.
+.
+.TP
 .B \-AvoidShiftNumLock
 Key affected by NumLock often require a fake Shift to be inserted in order
 for the correct symbol to be generated. Turning on this option avoids these
@@ -179,6 +188,15 @@ is \fB*:stderr:30\fP.
 .B \-MaxConnectionTime \fIseconds\fP
 Terminate when a client has been connected for \fIN\fP seconds.  Default is
 0.
+.
+.TP
+.B \-MicSource \fImode\fP
+Where headset microphone audio from Quest VNC clients goes (pseudo-encoding
+-2703, client message 248). \fBauto\fP creates a PulseAudio pipe source called
+QuestVNC-Mic with \fBpactl\fP while clients are connected and removes it
+when the last one leaves. The extension shares its message type with fences,
+so it is only offered to clients that do not use fences. Default is
+\fBnone\fP.
 .
 .TP
 .B \-MaxCutText \fIbytes\fP

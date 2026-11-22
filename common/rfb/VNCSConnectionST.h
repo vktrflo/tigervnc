@@ -27,10 +27,13 @@
 #ifndef __RFB_VNCSCONNECTIONST_H__
 #define __RFB_VNCSCONNECTIONST_H__
 
+#include <sys/time.h>
+#include <vector>
 #include <map>
 
 #include <core/Timer.h>
 
+#include <rfb/AudioResampler.h>
 #include <rfb/Congestion.h>
 #include <rfb/EncodeManager.h>
 #include <rfb/SConnection.h>
@@ -83,6 +86,8 @@ namespace rfb {
     void announceClipboardOrClose(bool available);
     void sendClipboardDataOrClose(const char* data);
     void desktopReadyOrClose();
+    void announceAudioOrClose();
+    void sendAudioOrClose(const int16_t* pcm, size_t frames);
 
     // The following methods never throw exceptions
 
@@ -145,6 +150,14 @@ namespace rfb {
     void supportsFence() override;
     void supportsContinuousUpdates() override;
     void supportsLEDState() override;
+    void supportsQEMUAudio() override;
+    void supportsQuestMic() override;
+    void audioEnable(bool enable) override;
+    void audioSetFormat(int sampleFormat, int channels,
+                        uint32_t frequency) override;
+    void micStart(int channels, uint32_t sampleRate) override;
+    void micData(const uint8_t* data, size_t len) override;
+    void micStop() override;
 
     // Timer callbacks
     void handleTimeout(core::Timer* t) override;
@@ -204,6 +217,18 @@ namespace rfb {
     bool clientHasCursor;
 
     std::string closeReason;
+
+    // Sound (QEMU audio extension)
+    bool audioAnnounced;
+    bool audioEnabled;
+    int audioFormat;
+    AudioResampler audioResampler;
+    std::vector<int16_t> audioSamples;
+    std::vector<uint8_t> audioBytes;
+    struct timeval audioBacklogSince;
+
+    // Headset microphone (Quest VNC extension)
+    bool micActive;
   };
 }
 #endif

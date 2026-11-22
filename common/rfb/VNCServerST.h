@@ -107,6 +107,9 @@ namespace rfb {
 
     void bell() override;
 
+    void setAudioAvailable(bool available) override;
+    void sendAudio(const int16_t* pcm, size_t frames) override;
+
     // VNCServerST-only methods
 
     // Methods to get the currently set server state
@@ -116,6 +119,8 @@ namespace rfb {
     const core::Point& getCursorPos() const { return cursorPos; }
     const char* getName() const { return name.c_str(); }
     unsigned getLEDState() const { return ledState; }
+    bool isAudioAvailable() const { return audioAvailable; }
+    bool isMicAvailable();
     bool isDesktopReady() const { return desktopStarted; }
 
     // Event handlers
@@ -126,6 +131,14 @@ namespace rfb {
     void handleClipboardRequest(VNCSConnectionST* client);
     void handleClipboardAnnounce(VNCSConnectionST* client, bool available);
     void handleClipboardData(VNCSConnectionST* client, const char* data);
+
+    // Headset microphone. Only one client at a time feeds the
+    // microphone; the most recent one to start wins.
+    void micStart(VNCSConnectionST* client, int channels,
+                  uint32_t sampleRate);
+    void micData(VNCSConnectionST* client, const uint8_t* data,
+                 size_t len);
+    void micStop(VNCSConnectionST* client);
 
     unsigned int setDesktopSize(VNCSConnectionST* requester,
                                 int fb_width, int fb_height,
@@ -194,6 +207,8 @@ namespace rfb {
     std::list<VNCSConnectionST*> clients;
     VNCSConnectionST* pointerClient;
     VNCSConnectionST* clipboardClient;
+    VNCSConnectionST* micClient;
+    bool audioAvailable;
     std::list<VNCSConnectionST*> clipboardRequestors;
 
     time_t pointerClientTime;

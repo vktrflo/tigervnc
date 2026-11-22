@@ -245,6 +245,26 @@ void XDesktop::poll() {
   }
 }
 
+bool XDesktop::micAvailable()
+{
+  return mic.available();
+}
+
+void XDesktop::micStart(int channels, uint32_t sampleRate)
+{
+  mic.start(channels, sampleRate);
+}
+
+void XDesktop::micData(const uint8_t* data, size_t len)
+{
+  mic.data(data, len);
+}
+
+void XDesktop::micStop()
+{
+  mic.stop();
+}
+
 void XDesktop::init(rfb::VNCServer* vs)
 {
   server = vs;
@@ -288,11 +308,17 @@ void XDesktop::start()
 
   server->setLEDState(ledState);
 
+  mic.open();
+  audio.start(server);
+
   running = true;
 }
 
 void XDesktop::stop() {
   running = false;
+
+  audio.stop();
+  mic.close();
 
 #ifdef HAVE_XTEST
   // Delete added keycodes

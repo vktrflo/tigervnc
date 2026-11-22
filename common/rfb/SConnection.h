@@ -173,6 +173,15 @@ namespace rfb {
     void clipboardProvide(uint32_t flags, const size_t* lengths,
                           const uint8_t* const* data) override;
 
+    // Sound and microphone messages are ignored unless a derived class
+    // overrides these.
+    void audioEnable(bool enable) override;
+    void audioSetFormat(int sampleFormat, int channels,
+                        uint32_t frequency) override;
+    void micStart(int channels, uint32_t sampleRate) override;
+    void micData(const uint8_t* data, size_t len) override;
+    void micStop() override;
+
     // Methods to be overridden in a derived class
 
     // supportsLocalCursor() is called whenever the status of
@@ -197,6 +206,16 @@ namespace rfb {
     // should be sent back to the client to inform it of the current
     // server state.
     virtual void supportsLEDState();
+
+    // supportsQEMUAudio() is called the first time we detect that the
+    // client can play sound sent with the QEMU audio extension. Call
+    // writer()->writeQEMUAudioSupport() if sound is available.
+    virtual void supportsQEMUAudio();
+
+    // supportsQuestMic() is called the first time we detect that the
+    // client can send headset microphone audio (Quest VNC extension).
+    // Call offerQuestMic() if a microphone sink is available.
+    virtual void supportsQuestMic();
 
     // authSuccess() is called when authentication has succeeded.
     virtual void authSuccess();
@@ -268,6 +287,13 @@ namespace rfb {
 
     void setState(stateEnum s) { state_ = s; }
 
+    // offerQuestMic() announces the Quest VNC microphone extension to
+    // the client. That extension reuses message type 248 (ClientFence),
+    // so it is only offered to clients that do not use fences, and
+    // fences are refused from then on. Returns true if it was offered.
+    bool offerQuestMic();
+    bool questMicOffered() const { return questMicOffered_; }
+
   private:
     void cleanup();
     void writeFakeColourMap(void);
@@ -311,6 +337,7 @@ namespace rfb {
     bool hasRemoteClipboard;
     bool hasLocalClipboard;
     bool unsolicitedClipboardAttempt;
+    bool questMicOffered_;
   };
 }
 #endif
