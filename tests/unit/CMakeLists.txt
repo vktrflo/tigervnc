@@ -15,6 +15,10 @@ enable_testing()
 
 include_directories(${CMAKE_SOURCE_DIR}/vncviewer)
 
+add_executable(audioresampler audioresampler.cxx)
+target_link_libraries(audioresampler PRIVATE rfb GTest::gtest_main)
+gtest_discover_tests(audioresampler)
+
 add_executable(configargs configargs.cxx)
 target_link_libraries(configargs PRIVATE rfb GTest::gtest_main)
 gtest_discover_tests(configargs)
